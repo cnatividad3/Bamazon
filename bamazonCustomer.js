@@ -1,8 +1,10 @@
+//require
 const inquirer = require("inquirer");
 const mysql = require("mysql");
+const Table = require('easy-table');
 
-
-const db = mysql.createConnection({
+//connection
+const connection = mysql.createConnection({
   host: "localhost",
   port: 3306,
   user: "root",
@@ -10,70 +12,89 @@ const db = mysql.createConnection({
   database: "bamazon_DB"
 });
 
-db.connect(function(err){
+//connect
+connection.connect(function(err){
   if (err) throw err;
-  console.log(`Connected on ${db.threadId}`);
+  console.log(`you are now connected to ${connection.threadId}`);
   showProducts();
 });
 
+//display products
 function showProducts(){
-  db.query("SELECT * FROM products", function(err, items){
+  connection.query("SELECT * FROM products", function(err, items){
     if (err) throw err;
-    console.log(items);
-    pickProduct();
+//easy-table
+    const t = new Table;
+    items.forEach(function (product) {
+      t.cell('Product Id', product.item_id)
+      t.cell('Product Name', product.product_name)
+      t.cell('Department Name', product.department_name)
+      t.cell('Price', product.price, Table.number(2))
+      t.cell('Quantity', product.stock_quantity)
+      t.newRow()
+    })
+    
+    console.log(`
+==========================================================================
+                              Our Products
+==========================================================================
+${t.toString()}`);
+    pickProducts();
   });
 
 };
 
-// chosen product to buy
-function pickProduct(){
-  db.query("SELECT * FROM products", function(err, items){
+// function to choose product to buy
+function pickProducts(){
+  connection.query("SELECT * FROM products", function(err, items){
     if (err) throw err;
-
+//inquirer
     inquirer
-    
-    .prompt([
-      {
-        name: "itemID",
-        message: "What item would you like to purchase (please enter item ID)?",
+    .prompt([{
+        name: "ID",
+        message: "Please enter ID of desired item",
         type: "input",
         default: 1
       },
       {
         name: "quantity",
-        message: "How many do you want?",
+        message: "How many would you like to purchase?",
         type: "input",
-        default: 1
+        default: 1,
       }
-    ]).then(function(productInfo) {
-      const selectedItem = items.find(item => item.item_id === productInfo.itemID);
+    ]).then(function(itemInfo){
+      
+      const chosenItem = items.find(function(item){
+        return item.item_id === parseFloat(itemInfo.ID)
+      });
 
-      if (productInfo.quantity > selectedItem.stock_quantity) {
+      //check quantitiy
+      if (itemInfo.quantity > chosenItem.stock_quantity) {
         console.log("Insufficient quantity!");
-        pickProduct();
+        pickProducts();
       } else {
-        let updateQuantity = selectedItem.stock_quantity - productInfo.quantity;
-        let totalCost = selectedItem.price * productInfo.quantity;
-        console.log(`Purchase successful! Your total cost: ${totalCost}`);
-        purchasedItem(selectedItem.item_id, updateQuantity);
+        let updateStock = chosenItem.stock_quantity - itemInfo.quantity;
+        let totalCost = chosenItem.price * itemInfo.quantity;
+        console.log(`Item added to bag. Cost: $${totalCost}`);
+        purchasedItem(chosenItem.item_id, updateStock);
       };
 
-    })
+    });
   });
 };
 
-// check quantity
+
+// use to check the quantity of an item
 const purchasedItem = function(itemId, quantity){
-  db.query("UPDATE products SET ? WHERE ?", [
-    {
+  connection.query("UPDATE products SET ? WHERE ?", [{
       stock_quantity: parseFloat(quantity)
     },
     {
       item_id: itemId
     }
-  ], function(err, res) {
+  ], function(err, res){
     if (err) throw err;
-    console.log("Look for another item!")
-    pickProduct();
+    console.log("thank you for you purchase!")
+    showProducts();
   })
 }
